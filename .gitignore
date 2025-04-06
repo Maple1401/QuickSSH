@@ -1,0 +1,36 @@
+# 二进制文件
+/quickssh
+/quickssh.exe
+
+# 输出目录
+/bin
+/release
+
+# Go 相关
+*.o
+*.a
+*.so
+/_obj
+/_test
+*.cgo1.go
+*.cgo2.c
+_cgo_defun.c
+_cgo_gotypes.go
+_cgo_export.*
+_testmain.go
+*.exe
+*.test
+*.prof
+*.dll
+*.dylib
+
+# 编辑器和 IDE 相关文件
+.idea/
+.vscode/
+*.swp
+*.swo
+*.sublime*
+
+# 操作系统相关
+.DS_Store
+Thumbs.db

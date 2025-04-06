@@ -1,0 +1,107 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    name: Build QuickSSH
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        goos: [linux, darwin, windows]
+        goarch: [amd64, arm64]
+        exclude:
+          - goos: windows
+            goarch: arm64
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.19'
+
+      - name: Install dependencies
+        run: |
+          go mod download
+          go mod tidy
+
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          OUTPUT_BASE="quickssh-${{ matrix.goos }}-${{ matrix.goarch }}"
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            OUTPUT_NAME="${OUTPUT_BASE}.exe"
+          else
+            OUTPUT_NAME="${OUTPUT_BASE}"
+          fi
+          mkdir -p ./dist
+          go build -ldflags="-s -w" -o ./dist/${OUTPUT_NAME} .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: quickssh-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ./dist/quickssh-*
+          if-no-files-found: error
+          retention-days: 1
+
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Create release directory
+        run: mkdir -p ./release
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+
+      - name: Prepare artifacts for release
+        run: |
+          mkdir -p ./release
+          find ./artifacts -type f -name "quickssh*" | while read file; do
+            filename=$(basename "$file")
+            platform=$(echo "$filename" | cut -d'-' -f2)
+            arch=$(echo "$filename" | cut -d'-' -f3 | cut -d'.' -f1)
+            
+            if [ "$platform" = "windows" ]; then
+              new_name="quickssh.exe"
+            else
+              new_name="quickssh"
+            fi
+            
+            cp "$file" "./release/${new_name}"
+            zip "./release/quickssh-${platform}-${arch}.zip" "./release/${new_name}"
+            rm "./release/${new_name}"
+          done
+
+      - name: Extract tag name
+        id: tag_name
+        run: echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag_name.outputs.tag }}
+          name: QuickSSH ${{ steps.tag_name.outputs.tag }}
+          body: |
+            ## QuickSSH ${{ steps.tag_name.outputs.tag }}
+            
+            ### 安装说明
+            下载对应平台的ZIP文件，解压后直接使用`quickssh`（或`quickssh.exe`）。
+          files: ./release/*.zip
